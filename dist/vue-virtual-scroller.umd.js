@@ -76,6 +76,7 @@ var ResizeObserver = { render: function render() {
 		this._resizeObject = object;
 		object.setAttribute('style', 'display: block; position: absolute; top: 0; left: 0; height: 100%; width: 100%; overflow: hidden; pointer-events: none; z-index: -1;');
 		object.setAttribute('aria-hidden', 'true');
+		object.setAttribute('tabindex', -1);
 		object.onload = this.addResizeHandlers;
 		object.type = 'text/html';
 		if (isIE) {
@@ -103,7 +104,7 @@ function install(Vue) {
 // Plugin
 var plugin = {
 	// eslint-disable-next-line no-undef
-	version: "0.4.3",
+	version: "0.4.4",
 	install: install
 };
 
@@ -186,6 +187,66 @@ if (typeof window !== 'undefined') {
 if (GlobalVue$1) {
 	GlobalVue$1.use(plugin$2);
 }
+
+var commonjsGlobal = typeof window !== 'undefined' ? window : typeof global !== 'undefined' ? global : typeof self !== 'undefined' ? self : {};
+
+
+
+
+
+function createCommonjsModule(fn, module) {
+	return module = { exports: {} }, fn(module, module.exports), module.exports;
+}
+
+var scrollparent = createCommonjsModule(function (module) {
+(function (root, factory) {
+  if (typeof undefined === "function" && undefined.amd) {
+    undefined([], factory);
+  } else if ('object' === "object" && module.exports) {
+    module.exports = factory();
+  } else {
+    root.Scrollparent = factory();
+  }
+}(commonjsGlobal, function () {
+  var regex = /(auto|scroll)/;
+
+  var parents = function (node, ps) {
+    if (node.parentNode === null) { return ps; }
+
+    return parents(node.parentNode, ps.concat([node]));
+  };
+
+  var style = function (node, prop) {
+    return getComputedStyle(node, null).getPropertyValue(prop);
+  };
+
+  var overflow = function (node) {
+    return style(node, "overflow") + style(node, "overflow-y") + style(node, "overflow-x");
+  };
+
+  var scroll = function (node) {
+   return regex.test(overflow(node));
+  };
+
+  var scrollParent = function (node) {
+    if (!(node instanceof HTMLElement || node instanceof SVGElement)) {
+      return ;
+    }
+
+    var ps = parents(node.parentNode, []);
+
+    for (var i = 0; i < ps.length; i += 1) {
+      if (scroll(ps[i])) {
+        return ps[i];
+      }
+    }
+
+    return document.scrollingElement || document.documentElement;
+  };
+
+  return scrollParent;
+}));
+});
 
 var supportsPassive = false;
 
@@ -277,11 +338,18 @@ var Scroller = {
   },
 
   beforeDestroy: function beforeDestroy() {
-    this.removeWindowScroll();
+    this.removeListeners();
   },
 
 
   methods: {
+    getListenerTarget: function getListenerTarget() {
+      var target = scrollparent(this.$el);
+      if (target === window.document.documentElement) {
+        target = window;
+      }
+      return target;
+    },
     getScroll: function getScroll() {
       var el = this.$el;
       var scroll = void 0;
@@ -316,20 +384,27 @@ var Scroller = {
     },
     applyPageMode: function applyPageMode() {
       if (this.pageMode) {
-        this.addWindowScroll();
+        this.addListeners();
       } else {
-        this.removeWindowScroll();
+        this.removeListeners();
       }
     },
-    addWindowScroll: function addWindowScroll() {
-      window.addEventListener('scroll', this.handleScroll, supportsPassive ? {
+    addListeners: function addListeners() {
+      this.listenerTarget = this.getListenerTarget();
+      this.listenerTarget.addEventListener('scroll', this.handleScroll, supportsPassive ? {
         passive: true
       } : false);
-      window.addEventListener('resize', this.handleResize);
+      this.listenerTarget.addEventListener('resize', this.handleResize);
     },
-    removeWindowScroll: function removeWindowScroll() {
-      window.removeEventListener('scroll', this.handleScroll);
-      window.removeEventListener('resize', this.handleResize);
+    removeListeners: function removeListeners() {
+      if (!this.listenerTarget) {
+        return;
+      }
+
+      this.listenerTarget.removeEventListener('scroll', this.handleScroll);
+      this.listenerTarget.removeEventListener('resize', this.handleResize);
+
+      this.listenerTarget = null;
     },
     scrollToItem: function scrollToItem(index) {
       var scrollTop = void 0;
@@ -348,7 +423,7 @@ var Scroller = {
 
 var VirtualScroller = { render: function render() {
     var _vm = this;var _h = _vm.$createElement;var _c = _vm._self._c || _h;return _c(_vm.mainTag, { directives: [{ name: "observe-visibility", rawName: "v-observe-visibility", value: _vm.handleVisibilityChange, expression: "handleVisibilityChange" }], tag: "component", staticClass: "virtual-scroller", class: _vm.cssClass, on: { "&scroll": function scroll($event) {
-          _vm.handleScroll($event);
+          return _vm.handleScroll($event);
         } } }, [_vm._t("before-container"), _vm._v(" "), _c(_vm.containerTag, { ref: "itemContainer", tag: "component", staticClass: "item-container", class: _vm.containerClass, style: _vm.itemContainerStyle }, [_vm._t("before-content"), _vm._v(" "), _c(_vm.contentTag, { ref: "items", tag: "component", staticClass: "items", class: _vm.contentClass, style: _vm.itemsStyle }, [_vm.renderers ? _vm._l(_vm.visibleItems, function (item, index) {
       return _c(_vm.renderers[item[_vm.typeField]], { key: _vm.keysEnabled && item[_vm.keyField] || undefined, tag: "component", staticClass: "item", attrs: { "item": item, "item-index": _vm.$_startIndex + index } });
     }) : [_vm._l(_vm.visibleItems, function (item, index) {
@@ -606,7 +681,7 @@ var uid = 0;
 
 var RecycleList = { render: function render() {
     var _vm = this;var _h = _vm.$createElement;var _c = _vm._self._c || _h;return _c('div', { directives: [{ name: "observe-visibility", rawName: "v-observe-visibility", value: _vm.handleVisibilityChange, expression: "handleVisibilityChange" }], staticClass: "recycle-list", class: _vm.cssClass, on: { "&scroll": function scroll($event) {
-          _vm.handleScroll($event);
+          return _vm.handleScroll($event);
         } } }, [_c('div', { ref: "wrapper", staticClass: "item-wrapper", style: { height: _vm.totalHeight + 'px' } }, _vm._l(_vm.pool, function (view) {
       return _c('div', { key: view.nr.id, staticClass: "item-view", style: { transform: 'translateY(' + view.top + 'px)' } }, [_vm._t("default", null, { item: view.item, index: view.nr.index, active: view.nr.used })], 2);
     })), _vm._v(" "), _vm._t("after-container"), _vm._v(" "), _c('resize-observer', { on: { "notify": _vm.handleResize } })], 2);
